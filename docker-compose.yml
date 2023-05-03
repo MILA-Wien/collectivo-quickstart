@@ -1,0 +1,177 @@
+# TODO: Try without etc/hosts conf
+# TODO: Connect keycloak to keycloak-db
+
+version: "3.9"
+
+services:
+  # Backend application of collectivo.
+  collectivo:
+    container_name: collectivo
+    restart: always
+    build: ./collectivo
+    command: >
+      sh -c "python manage.py migrate &&
+             gunicorn collectivo_app.wsgi:application --bind 0.0.0.0:8000"
+    volumes:
+      - ../collectivo/collectivo_app:/collectivo_app # TODO: REMOVE
+      - ../collectivo/collectivo:/collectivo_app/collectivo # TODO: REMOVE
+      - ./collectivo/collectivo.yml:/collectivo_app/collectivo.yml
+    environment:
+      DB_HOST: collectivo-db
+      DB_NAME: collectivo_db
+      DB_USER: ${COLLECTIVO_DB_USER}
+      DB_PASS: ${COLLECTIVO_DB_PASSWORD}
+      SECRET_KEY: ${COLLECTIVO_SECRET_KEY}
+      ALLOWED_HOSTS: ${COLLECTIVO_URL}
+      ALLOWED_ORIGINS: http://${COLLECTIVO_UX_URL}
+      KEYCLOAK_URL: http://${KEYCLOAK_URL}
+      KEYCLOAK_CLIENT_SECRET: ${COLLECTIVO_KEYCLOAK_CLIENT_SECRET}
+      CELERY_BROKER: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      CELERY_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+    depends_on:
+      collectivo-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  # Background worker to process asynchronous tasks of collectivo.
+  # Environment should be identical to collectivo.
+  celery:
+    container_name: celery
+    restart: always
+    build: ./collectivo
+    command: celery -A collectivo_app worker -l info
+    volumes:
+      - ../collectivo/collectivo_app:/collectivo_app # TODO: REMOVE
+      - ../collectivo/collectivo:/collectivo_app/collectivo # TODO: REMOVE
+      - ./collectivo/collectivo.yml:/collectivo_app/collectivo.yml
+    environment:
+      DB_HOST: collectivo-db
+      DB_NAME: collectivo_db
+      DB_USER: ${COLLECTIVO_DB_USER}
+      DB_PASS: ${COLLECTIVO_DB_PASSWORD}
+      SECRET_KEY: ${COLLECTIVO_SECRET_KEY}
+      ALLOWED_HOSTS: ${COLLECTIVO_URL}
+      ALLOWED_ORIGINS: http://${COLLECTIVO_UX_URL}
+      KEYCLOAK_URL: http://${KEYCLOAK_URL}
+      KEYCLOAK_CLIENT_SECRET: ${COLLECTIVO_KEYCLOAK_CLIENT_SECRET}
+      CELERY_BROKER: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      CELERY_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+    depends_on:
+      collectivo-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+  # Background worker to processes the scheduled tasks of collectivo.
+  # Environment should be identical to collectivo.
+  celery-beat:
+    container_name: celery-beat
+    restart: always
+    build: ./collectivo
+    command: celery -A collectivo_app beat -l info
+    volumes:
+      - ../collectivo/collectivo_app:/collectivo_app # TODO: REMOVE
+      - ../collectivo/collectivo:/collectivo_app/collectivo # TODO: REMOVE
+      - ./collectivo/collectivo.yml:/collectivo_app/collectivo.yml
+    environment:
+      DB_HOST: collectivo-db
+      DB_NAME: collectivo_db
+      DB_USER: ${COLLECTIVO_DB_USER}
+      DB_PASS: ${COLLECTIVO_DB_PASSWORD}
+      SECRET_KEY: ${COLLECTIVO_SECRET_KEY}
+      ALLOWED_HOSTS: ${COLLECTIVO_URL}
+      ALLOWED_ORIGINS: http://${COLLECTIVO_UX_URL}
+      KEYCLOAK_URL: http://${KEYCLOAK_URL}
+      KEYCLOAK_CLIENT_SECRET: ${COLLECTIVO_KEYCLOAK_CLIENT_SECRET}
+      CELERY_BROKER: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      CELERY_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+    depends_on:
+      collectivo-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+  # Communication broker for celery.
+  redis:
+    container_name: redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+    command: >
+      --requirepass "${REDIS_PASSWORD}" --appendonly yes --maxmemory 1000mb
+      --maxmemory-policy volatile-lru
+
+  # Database for collectivo.
+  collectivo-db:
+    container_name: collectivo-db
+    image: postgres:14-alpine
+    volumes:
+      - collectivo-db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: collectivo_db
+      POSTGRES_USER: ${COLLECTIVO_DB_USER}
+      POSTGRES_PASSWORD: ${COLLECTIVO_DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Frontend for collectivo.
+  collectivo-ux:
+    container_name: collectivo-ux
+    build: ./collectivo-ux
+    restart: always
+    environment:
+      VITE_APP_API: http://${COLLECTIVO_URL}
+      VITE_KEYCLOAK_URL: http://${KEYCLOAK_URL}
+    ports:
+      - "8001:80"
+
+  # Keycloak for authentication.
+  keycloak:
+    build: ./keycloak
+    container_name: keycloak
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KEYCLOAK_FRONTEND_URL: http://${KEYCLOAK_URL}
+      ROOT_LOGLEVEL: ALL
+      KEYCLOAK_LOGLEVEL: DEBUG
+    volumes:
+      - ./keycloak/import:/opt/keycloak/data/import:ro
+      - ./keycloak/export:/tmp/export
+      - ./keycloak/healthcheck.sh:/healthcheck.sh
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://${KEYCLOAK_URL}/realms/master"]
+      interval: 5s
+      timeout: 2s
+      retries: 15
+
+  # Database for keycloak
+  keycloak-db:
+    container_name: keycloak-db
+    image: postgres:14-alpine
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: ${KEYCLOAK_DB_USER}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+
+volumes:
+  collectivo-db-data:
+  keycloak-db-data:
