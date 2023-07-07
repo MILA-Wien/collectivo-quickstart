@@ -10,7 +10,7 @@ services:
     build: ./collectivo
     command: >
       sh -c "python manage.py migrate &&
-             gunicorn collectivo_app.wsgi:application --bind 0.0.0.0:8000"
+             python manage.py runserver 0.0.0.0:8000"
     volumes:
       - ../collectivo/collectivo_app:/collectivo_app # TODO: REMOVE
       - ../collectivo/collectivo:/collectivo_app/collectivo # TODO: REMOVE
@@ -25,8 +25,18 @@ services:
       ALLOWED_ORIGINS: ${COLLECTIVO_UX_URL}
       KEYCLOAK_URL: ${KEYCLOAK_URL}
       KEYCLOAK_CLIENT_SECRET: ${COLLECTIVO_KEYCLOAK_CLIENT_SECRET}
-      CELERY_BROKER: "redis://:${REDIS_PASSWORD}@redis:6379/0"
-      CELERY_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      CELERY_BROKER: ${REDIS_URL}
+      CELERY_BACKEND: ${REDIS_URL}
+      EMAIL_HOST: ${EMAIL_HOST}
+      EMAIL_PORT: ${EMAIL_PORT}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS}
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+      ADMIN_USER: ${COLLECTIVO_ADMIN_USER}
+      ADMIN_PASS: ${COLLECTIVO_ADMIN_PASS}
+      DEVELOPMENT: ${DEVELOPMENT}
     depends_on:
       collectivo-db:
         condition: service_healthy
@@ -45,8 +55,8 @@ services:
     build: ./collectivo
     command: celery -A collectivo_app worker -l info
     volumes:
-      - ../collectivo/collectivo_app:/collectivo_app # TODO: REMOVE
-      - ../collectivo/collectivo:/collectivo_app/collectivo # TODO: REMOVE
+      # - ../collectivo/collectivo_app:/collectivo_app # TODO: REMOVE
+      # - ../collectivo/collectivo:/collectivo_app/collectivo # TODO: REMOVE
       - ./collectivo/collectivo.yml:/collectivo_app/collectivo.yml
     environment:
       DB_HOST: collectivo-db
@@ -58,8 +68,18 @@ services:
       ALLOWED_ORIGINS: ${COLLECTIVO_UX_URL}
       KEYCLOAK_URL: ${KEYCLOAK_URL}
       KEYCLOAK_CLIENT_SECRET: ${COLLECTIVO_KEYCLOAK_CLIENT_SECRET}
-      CELERY_BROKER: "redis://:${REDIS_PASSWORD}@redis:6379/0"
-      CELERY_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      CELERY_BROKER: ${REDIS_URL}
+      CELERY_BACKEND: ${REDIS_URL}
+      EMAIL_HOST: ${EMAIL_HOST}
+      EMAIL_PORT: ${EMAIL_PORT}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS}
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+      ADMIN_USER: ${COLLECTIVO_ADMIN_USER}
+      ADMIN_PASS: ${COLLECTIVO_ADMIN_PASS}
+      DEVELOPMENT: ${DEVELOPMENT}
     depends_on:
       collectivo-db:
         condition: service_healthy
@@ -76,8 +96,8 @@ services:
     build: ./collectivo
     command: celery -A collectivo_app beat -l info
     volumes:
-      - ../collectivo/collectivo_app:/collectivo_app # TODO: REMOVE
-      - ../collectivo/collectivo:/collectivo_app/collectivo # TODO: REMOVE
+      # - ../collectivo/collectivo_app:/collectivo_app # TODO: REMOVE
+      # - ../collectivo/collectivo:/collectivo_app/collectivo # TODO: REMOVE
       - ./collectivo/collectivo.yml:/collectivo_app/collectivo.yml
     environment:
       DB_HOST: collectivo-db
@@ -89,8 +109,18 @@ services:
       ALLOWED_ORIGINS: ${COLLECTIVO_UX_URL}
       KEYCLOAK_URL: ${KEYCLOAK_URL}
       KEYCLOAK_CLIENT_SECRET: ${COLLECTIVO_KEYCLOAK_CLIENT_SECRET}
-      CELERY_BROKER: "redis://:${REDIS_PASSWORD}@redis:6379/0"
-      CELERY_BACKEND: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      CELERY_BROKER: ${REDIS_URL}
+      CELERY_BACKEND: ${REDIS_URL}
+      EMAIL_HOST: ${EMAIL_HOST}
+      EMAIL_PORT: ${EMAIL_PORT}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS}
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+      ADMIN_USER: ${COLLECTIVO_ADMIN_USER}
+      ADMIN_PASS: ${COLLECTIVO_ADMIN_PASS}
+      DEVELOPMENT: ${DEVELOPMENT}
     depends_on:
       collectivo-db:
         condition: service_healthy
@@ -130,13 +160,18 @@ services:
   # Frontend for collectivo.
   collectivo-ux:
     container_name: collectivo-ux
-    build: ./collectivo-ux
+    command: yarn dev -- --host
+    build:
+      context: ./collectivo-ux
+      # Change this to Dockerfile if you want to build for production
+      dockerfile: ./Dockerfile-dev
     restart: always
     environment:
       VITE_APP_API: ${COLLECTIVO_URL}
       VITE_KEYCLOAK_URL: ${KEYCLOAK_URL}
     ports:
       - "8001:80"
+      - "5173:5173"
 
   # Keycloak for authentication.
   keycloak:

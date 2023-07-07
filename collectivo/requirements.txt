@@ -1,0 +1,2 @@
+# You can add additional requirements for Python here
+# E.g. requests>=2.28.0,<2.29
