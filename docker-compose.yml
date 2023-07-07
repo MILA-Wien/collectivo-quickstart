@@ -12,8 +12,6 @@ services:
       sh -c "python manage.py migrate &&
              python manage.py runserver 0.0.0.0:8000"
     volumes:
-      - ../collectivo/collectivo_app:/collectivo_app # TODO: REMOVE
-      - ../collectivo/collectivo:/collectivo_app/collectivo # TODO: REMOVE
       - ./collectivo/collectivo.yml:/collectivo_app/collectivo.yml
     environment:
       DB_HOST: collectivo-db
@@ -55,8 +53,6 @@ services:
     build: ./collectivo
     command: celery -A collectivo_app worker -l info
     volumes:
-      # - ../collectivo/collectivo_app:/collectivo_app # TODO: REMOVE
-      # - ../collectivo/collectivo:/collectivo_app/collectivo # TODO: REMOVE
       - ./collectivo/collectivo.yml:/collectivo_app/collectivo.yml
     environment:
       DB_HOST: collectivo-db
@@ -96,8 +92,6 @@ services:
     build: ./collectivo
     command: celery -A collectivo_app beat -l info
     volumes:
-      # - ../collectivo/collectivo_app:/collectivo_app # TODO: REMOVE
-      # - ../collectivo/collectivo:/collectivo_app/collectivo # TODO: REMOVE
       - ./collectivo/collectivo.yml:/collectivo_app/collectivo.yml
     environment:
       DB_HOST: collectivo-db
