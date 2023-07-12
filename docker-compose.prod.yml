@@ -1,0 +1,218 @@
+version: "3.9"
+
+services:
+  # A customized instance of collectivo for MILA.
+  collectivo:
+    restart: always
+    build: ./collectivo
+    volumes:
+      - ./collectivo/collectivo.yml:/collectivo_app/collectivo.yml
+      - ./collectivo/extensions/:/collectivo_app/extensions/
+      - ./uploads:/app/media_root/
+    command: >
+      sh -c "while ! nc -z collectivo-db 5432; do sleep 1; done &&
+             while ! nc -z keycloak 8080; do sleep 1; done &&
+             python manage.py migrate &&
+             gunicorn collectivo_app.wsgi:application --bind 0.0.0.0:8000
+             "
+    environment:
+      DB_HOST: collectivo-db
+      DB_NAME: collectivo_db
+      DB_USER: ${COLLECTIVO_DB_USER}
+      DB_PASS: ${COLLECTIVO_DB_PASSWORD}
+      SECRET_KEY: ${COLLECTIVO_SECRET_KEY}
+      ALLOWED_HOSTS: ${COLLECTIVO_URL}
+      ALLOWED_ORIGINS: ${COLLECTIVO_UX_URL}
+      KEYCLOAK_URL: ${KEYCLOAK_URL}
+      KEYCLOAK_CLIENT_SECRET: ${COLLECTIVO_KEYCLOAK_CLIENT_SECRET}
+      EMAIL_HOST: ${EMAIL_HOST}
+      EMAIL_PORT: ${EMAIL_PORT}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS}
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+      CELERY_BROKER: ${REDIS_URL}
+      CELERY_BACKEND: ${REDIS_URL}
+      VIRTUAL_HOST: ${COLLECTIVO_URL_BASE}
+      VIRTUAL_PORT: 8000
+      LETSENCRYPT_HOST: ${COLLECTIVO_URL_BASE}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+      ADMIN_USER: ${COLLECTIVO_ADMIN_USER}
+      ADMIN_PASS: ${COLLECTIVO_ADMIN_PASS}
+    labels:
+      io.portainer.accesscontrol.teams: ${PORTAINER_TEAM_ID}
+    depends_on:
+      - collectivo-db
+      - keycloak
+      - redis
+    links:
+      - keycloak
+
+  # A celery worker that runs in the background.
+  # Image & environment should be the same as collectivo-mila.
+  celery:
+    restart: always
+    build: ./collectivo
+    command: celery -A collectivo_app worker -l info
+    volumes:
+      - ./collectivo/collectivo.yml:/collectivo_app/collectivo.yml
+      - ./collectivo/extensions/:/collectivo_app/extensions/
+      - ./uploads:/collectivo_app/media_root
+    environment:
+      DB_HOST: collectivo-db
+      DB_NAME: collectivo_db
+      DB_USER: ${COLLECTIVO_DB_USER}
+      DB_PASS: ${COLLECTIVO_DB_PASSWORD}
+      SECRET_KEY: ${COLLECTIVO_SECRET_KEY}
+      ALLOWED_HOSTS: ${COLLECTIVO_URL}
+      ALLOWED_ORIGINS: ${COLLECTIVO_UX_URL}
+      KEYCLOAK_URL: ${KEYCLOAK_URL}
+      KEYCLOAK_CLIENT_SECRET: ${COLLECTIVO_KEYCLOAK_CLIENT_SECRET}
+      EMAIL_HOST: ${EMAIL_HOST}
+      EMAIL_PORT: ${EMAIL_PORT}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS}
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+      CELERY_BROKER: ${REDIS_URL}
+      CELERY_BACKEND: ${REDIS_URL}
+      HABIDAT_SERVER_URL: ${HABIDAT_SERVER_URL}
+      LOTZAPP_URL: ${LOTZAPP_URL}
+      LOTZAPP_USER: ${LOTZAPP_USER}
+      LOTZAPP_PASS: ${LOTZAPP_PASS}
+      VIRTUAL_HOST: ${COLLECTIVO_URL_BASE}
+      VIRTUAL_PORT: 8000
+      LETSENCRYPT_HOST: ${COLLECTIVO_URL_BASE}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+    labels:
+      io.portainer.accesscontrol.teams: ${PORTAINER_TEAM_ID}
+    depends_on:
+      - collectivo
+      - redis
+
+  # A celery worker that runs in the background and processes the scheduled tasks.
+  celery-beat:
+    restart: always
+    build: ./collectivo
+    command: celery -A collectivo_app beat -l info
+    volumes:
+      - ./collectivo/collectivo.yml:/collectivo_app/collectivo.yml
+      - ./collectivo/extensions/:/collectivo_app/extensions/
+      - ./uploads:/collectivo_app/media_root
+    environment:
+      DB_HOST: collectivo-db
+      DB_NAME: collectivo_db
+      DB_USER: ${COLLECTIVO_DB_USER}
+      DB_PASS: ${COLLECTIVO_DB_PASSWORD}
+      SECRET_KEY: ${COLLECTIVO_SECRET_KEY}
+      ALLOWED_HOSTS: ${COLLECTIVO_URL}
+      ALLOWED_ORIGINS: ${COLLECTIVO_UX_URL}
+      KEYCLOAK_URL: ${KEYCLOAK_URL}
+      KEYCLOAK_CLIENT_SECRET: ${COLLECTIVO_KEYCLOAK_CLIENT_SECRET}
+      EMAIL_HOST: ${EMAIL_HOST}
+      EMAIL_PORT: ${EMAIL_PORT}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS}
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+      CELERY_BROKER: ${REDIS_URL}
+      CELERY_BACKEND: ${REDIS_URL}
+      VIRTUAL_HOST: ${COLLECTIVO_URL_BASE}
+      VIRTUAL_PORT: 8000
+      LETSENCRYPT_HOST: ${COLLECTIVO_URL_BASE}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+    labels:
+      io.portainer.accesscontrol.teams: ${PORTAINER_TEAM_ID}
+    depends_on:
+      - collectivo
+      - redis
+
+  # A communication broker for celery.
+  redis:
+    image: redis:7.0-alpine
+    command: >
+      --requirepass "${REDIS_PASSWORD}" --appendonly yes --maxmemory 1000mb
+      --maxmemory-policy volatile-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    labels:
+      io.portainer.accesscontrol.teams: ${PORTAINER_TEAM_ID}
+
+  # A PostgreSQL database.
+  collectivo-db:
+    image: postgres:14-alpine
+    volumes:
+      - collectivo-db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: collectivo_db
+      POSTGRES_USER: ${COLLECTIVO_DB_USER}
+      POSTGRES_PASSWORD: ${COLLECTIVO_DB_PASSWORD}
+    labels:
+      io.portainer.accesscontrol.teams: ${PORTAINER_TEAM_ID}
+
+  # A frontend web application.
+  collectivo-ux:
+    build: ./collectivo-ux
+    restart: always
+    environment:
+      VIRTUAL_HOST: ${COLLECTIVO_UX_URL_BASE}
+      VIRTUAL_PORT: 80
+      LETSENCRYPT_HOST: ${COLLECTIVO_UX_URL_BASE}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+      VITE_API_URL: ${COLLECTIVO_URL}
+      VITE_KEYCLOAK_URL: ${KEYCLOAK_URL}
+    labels:
+      io.portainer.accesscontrol.teams: ${PORTAINER_TEAM_ID}
+
+  # Database for keycloak
+  keycloak-db:
+    image: postgres:14-alpine
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: ${KEYCLOAK_DB_USER}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    labels:
+      io.portainer.accesscontrol.teams: ${PORTAINER_TEAM_ID}
+
+  # Keycloak for authentication.
+  keycloak:
+    build: ./keycloak
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KEYCLOAK_FRONTEND_URL: ${KEYCLOAK_URL}
+      KEYCLOAK_IMPORT: /tmp/collectivo-realm.json
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_DB_SCHEMA: public
+      KC_DB_URL_DATABASE: ${KEYCLOAK_DB_NAME}
+      KC_DB_URL_HOST: ${KEYCLOAK_DB_HOST}
+      KC_DB_URL_PORT: ${KEYCLOAK_DB_PORT}
+      KC_HOSTNAME: ${KEYCLOAK_URL_BASE}
+      VIRTUAL_HOST: ${KEYCLOAK_URL_BASE}
+      VIRTUAL_PORT: 8080
+      LETSENCRYPT_HOST: ${KEYCLOAK_URL_BASE}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+    volumes:
+      - ./docker/keycloak/import/collectivo-realm.json:/tmp/collectivo-realm.json
+      - ./docker/keycloak/themes/collectivo:/opt/keycloak/themes/collectivo
+      - ./docker/keycloak/imported/:/opt/keycloak/imported/
+    depends_on:
+      - keycloak-db
+    links:
+      - keycloak-db
+    labels:
+      io.portainer.accesscontrol.teams: ${PORTAINER_TEAM_ID}
+
+volumes:
+  collectivo-db-data:
+  keycloak-db-data:

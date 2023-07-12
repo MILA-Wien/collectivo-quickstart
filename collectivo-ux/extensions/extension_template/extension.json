@@ -1,0 +1,5 @@
+{
+  "endpoints": {
+    "extensionTemplateMyModel": "/extension_template/my_model/"
+  }
+}

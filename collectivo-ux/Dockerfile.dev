@@ -1,19 +1,26 @@
+# A development container for collectivo-ux
+
+# Create build environment
 FROM node:18 AS build-env
+
+# Set the VERSION variable to your desired version (e.g. v0.6.2)
+# Available versions: https://github.com/MILA-Wien/collectivo-ux/tags
+ENV VERSION=main
 
 # Create app directory
 WORKDIR /app
 
+# Set timezone
 ENV TZ=Europe/Vienna
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Install app dependencies
-# You can set this variable to your desired version (e.g. v0.6.2)
-ENV VERSION=main
+# Download collectivo-ux
 RUN git clone --depth 1 --branch ${VERSION} https://github.com/MILA-Wien/collectivo-ux .
 
-# Copy extensions into the root of the collectivo app
+# Copy extensions into the root of the app
 COPY ./extensions /app/src/extensions
 COPY ./collectivo.json /app/src/collectivo.json
 COPY ./favicon.ico /app/public/favicon.ico
 
+# Install app dependencies
 RUN  yarn install --frozen-lockfile

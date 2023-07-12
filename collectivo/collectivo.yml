@@ -35,3 +35,4 @@ extensions:
   - collectivo.emails
   - collectivo.emails.tags
   - collectivo.payments
+  - extensions.extension_template
