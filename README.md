@@ -1,3 +1,1 @@
-# Collectivo Quickstart
-
-An example implementation of Collectivo. See https://collectivo.io/quickstart/
+This is an archived version of Collectivo. The current version has been moved to: https://github.com/collectivo-dev/collectivo
